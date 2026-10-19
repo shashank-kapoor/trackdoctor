@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { CornerCoaching, SessionCoaching } from '../lib/coach';
-import { fmtLap } from '../lib/coach';
+import { fmtLap, TIE_S } from '../lib/coach';
 import type { SessionAnalysis } from '../lib/types';
 import { severityOf } from '../lib/ui';
 import { IconTarget, IconWarn } from './Icons';
@@ -16,14 +16,14 @@ interface Props {
 function CornerCard({ cc, lapNo, onClick }: { cc: CornerCoaching; lapNo: number; onClick: () => void }) {
   const k = cc.corner;
   const loss = k.laps.find((l) => l.lap === lapNo)?.loss ?? k.meanLoss;
-  const sev = severityOf(k.meanLoss);
+  const sev = severityOf(k.medianLoss);
   return (
     <button className={`focus-item sev-${sev}`} onClick={onClick}>
       <span className="corner-chip">{k.def.id}</span>
       <div className="body">
         <div className="t">{cc.headline}</div>
         <div className="s">
-          avg {k.meanLoss.toFixed(2)}s · this lap {loss < 0.005 ? 'best' : `+${loss.toFixed(2)}s`}
+          typical {k.medianLoss.toFixed(2)}s · this lap {loss < 0.005 ? 'best' : `+${loss.toFixed(2)}s`}
         </div>
       </div>
     </button>
@@ -68,16 +68,25 @@ export default function Overview({ a, coach, lapNo, onSelectCorner, chart }: Pro
           <h3>Focus next session</h3>
           <span className="tag">Top 3</span>
         </div>
-        {coach.focus.map((f, i) => (
+        <p className="dim" style={{ fontSize: 12.5, margin: '-4px 0 10px' }}>
+          Ranked by time lost on a typical lap, so one bad lap doesn't top the list. Corners within {TIE_S} s of each other share a
+          priority (=).
+        </p>
+        {coach.focus.map((f) => (
           <button key={f.corner.def.id} className={`focus-item sev-${f.severity}`} onClick={() => onSelectCorner(f.corner.def.id)}>
-            <span className="rank">{i + 1}</span>
+            <span className="rank" title={f.tied ? 'Equal priority' : undefined}>
+              {f.tied ? '=' : ''}
+              {f.rank}
+            </span>
             <div className="body">
               <div className="t">
-                {f.corner.def.id} · {f.headline}
+                {f.label} · {f.headline}
               </div>
-              <div className="s">{f.pattern ?? f.corner.def.blurb}</div>
+              <div className="s">
+                {f.linked ? `Exit sets up ${f.linked.corner.def.id} — fix both at once.` : (f.pattern ?? f.corner.def.blurb)}
+              </div>
             </div>
-            <span className="gain">{f.corner.meanLoss.toFixed(2)}s</span>
+            <span className="gain">{f.score.toFixed(2)}s</span>
           </button>
         ))}
       </div>

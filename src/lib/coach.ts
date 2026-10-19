@@ -15,11 +15,29 @@ export interface CornerCoaching {
   dos: string[];
   severity: 'high' | 'medium' | 'low';
   verdicts: Map<number, LapVerdict>;
+  /** The pattern that cost the most time here, if any. */
+  main: Diagnosis | null;
+  /** Set when most of the loss came from a single lap. */
+  oneOff: string | null;
 }
+
+/** A "focus next session" pick. May cover two corners when one corner's exit sets up the next. */
+export interface FocusItem extends CornerCoaching {
+  label: string;
+  /** Typical time lost per lap (s), including any linked corner. */
+  score: number;
+  linked: CornerCoaching | null;
+  /** Priority (1 = highest). Picks within TIE_S of the one above share its priority. */
+  rank: number;
+  tied: boolean;
+}
+
+/** Losses closer than this are noise with a handful of laps, so they share a priority. */
+export const TIE_S = 0.1;
 
 export interface SessionCoaching {
   corners: CornerCoaching[];
-  focus: CornerCoaching[];
+  focus: FocusItem[];
   keyFinding: string | null;
   dataQuality: { rateHz: number | null; brakeErrorM: number | null; note: string | null };
   consistency: number;
@@ -157,7 +175,12 @@ export function coachCorner(c: CornerAnalysis): CornerCoaching {
   const primary = main
     ? ACTION[main as Exclude<Diagnosis, 'good'>](c, t)
     : `You're consistent here. Keep hitting ~${t} km/h at the slowest point.`;
-  const severity = c.meanLoss >= 0.5 ? 'high' : c.meanLoss >= 0.2 ? 'medium' : 'low';
+  const severity = c.medianLoss >= 0.5 ? 'high' : c.medianLoss >= 0.2 ? 'medium' : 'low';
+  const byLoss = [...c.laps].sort((x, y) => y.loss - x.loss);
+  const oneOff =
+    byLoss.length >= 3 && byLoss[0].loss >= 0.5 && byLoss[0].loss >= 2 * byLoss[1].loss
+      ? `Mostly one lap: Lap ${byLoss[0].lap} lost ${s2(byLoss[0].loss)} s here. On a typical lap it's ${s2(c.medianLoss)} s.`
+      : null;
   return {
     corner: c,
     headline: headline(c, main, t),
@@ -167,12 +190,51 @@ export function coachCorner(c: CornerAnalysis): CornerCoaching {
     dos: [primary, ...c.def.tips],
     severity,
     verdicts,
+    main,
+    oneOff,
   };
+}
+
+/**
+ * Pick the three things to work on. Corners are ranked by typical (median) loss so one bad lap
+ * doesn't dominate, and a corner whose main problem is a slow approach is merged into the
+ * corner before it — that's where the time is really lost.
+ */
+export function pickFocus(corners: CornerCoaching[]): FocusItem[] {
+  const n = corners.length;
+  const items = new Map<number, FocusItem>();
+  corners.forEach((cc, i) =>
+    items.set(i, { ...cc, label: cc.corner.def.id, score: cc.corner.medianLoss, linked: null, rank: 0, tied: false }),
+  );
+  corners.forEach((cc, i) => {
+    if (cc.main !== 'slow-approach' || n < 2) return;
+    const p = (i - 1 + n) % n;
+    const prev = items.get(p);
+    const me = items.get(i);
+    if (!prev || !me || prev.linked) return;
+    const primary = `${prev.primary} A better exit here also fixes ${cc.corner.def.id}, where you arrive slow.`;
+    items.set(p, {
+      ...prev,
+      label: `${prev.corner.def.id} → ${cc.corner.def.id}`,
+      score: prev.score + me.score,
+      linked: cc,
+      primary,
+      dos: [primary, ...prev.dos.slice(1)],
+    });
+    items.delete(i);
+  });
+  const top = [...items.values()].sort((x, y) => y.score - x.score).slice(0, 3);
+  top.forEach((f, i) => {
+    const prev = top[i - 1];
+    f.rank = prev && prev.score - f.score < TIE_S ? prev.rank : (prev?.rank ?? 0) + 1;
+  });
+  for (const f of top) f.tied = top.filter((g) => g.rank === f.rank).length > 1;
+  return top;
 }
 
 export function coachSession(a: SessionAnalysis): SessionCoaching {
   const corners = a.corners.map(coachCorner);
-  const focus = [...corners].sort((x, y) => y.corner.meanLoss - x.corner.meanLoss).slice(0, 3);
+  const focus = pickFocus(corners);
 
   // Key finding: is the driver mostly over-slowing, or over-driving?
   let slow = 0;

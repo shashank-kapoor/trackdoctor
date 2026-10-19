@@ -10,9 +10,12 @@ const APEX_WINDOW = 70; // m either side of the corner anchor to look for the sl
 const ENTRY_WINDOW = 450; // m before the slowest point to look for the approach peak
 const EXIT_OFFSET = 100; // m after the slowest point for the exit-speed measurement
 
-const median = (xs: number[]) => {
+/** Middle value; with an even count, the mean of the two middle values. */
+export const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
-  return s.length ? s[Math.floor(s.length / 2)] : 0;
+  if (!s.length) return 0;
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
 function argMin(v: Float64Array, a: number, b: number) {
@@ -143,7 +146,7 @@ export function analyzeParsed(parsed: ParsedSession, track: TrackDef, opts: Anal
   const anchors = track.corners.map((c) => {
     const near = nearestIndex(best, c.apex);
     const mins = pool.map((l) => argMin(l.v, Math.max(0, near - w), Math.min(gridLen - 1, near + w)));
-    return median(mins);
+    return [...mins].sort((a, b) => a - b)[Math.floor(mins.length / 2)];
   });
   const bounds = anchors.map((a, i) => {
     const lo = i === 0 ? 0 : Math.round((anchors[i - 1] + a) / 2);
@@ -166,6 +169,7 @@ export function analyzeParsed(parsed: ParsedSession, track: TrackDef, opts: Anal
       laps: lapsM,
       best: bestLapM,
       meanLoss: lapsM.reduce((s, r) => s + r.loss, 0) / lapsM.length,
+      medianLoss: median(lapsM.map((r) => r.loss)),
       maxLoss: Math.max(...lapsM.map((r) => r.loss)),
       minSpeedSpread: Math.max(...mins) - Math.min(...mins),
     };

@@ -100,6 +100,8 @@ export interface CornerAnalysis {
   laps: CornerLap[];
   best: CornerLap;
   meanLoss: number;
+  /** Time lost on a typical lap — not skewed by one bad lap. */
+  medianLoss: number;
   maxLoss: number;
   minSpeedSpread: number;
 }

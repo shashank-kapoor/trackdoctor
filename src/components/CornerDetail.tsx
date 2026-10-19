@@ -30,7 +30,7 @@ export default function CornerDetail({ cc, lapNo, onSelectLap, onPrev, onNext, o
   const lo = Math.floor(Math.min(...mins, cc.target.lo) - 4);
   const hi = Math.ceil(Math.max(...mins, cc.target.hi) + 4);
   const pos = (v: number) => `${((v - lo) / (hi - lo)) * 100}%`;
-  const sev = severityOf(k.meanLoss);
+  const sev = severityOf(k.medianLoss);
 
   return (
     <div className="panel-body">
@@ -56,9 +56,9 @@ export default function CornerDetail({ cc, lapNo, onSelectLap, onPrev, onNext, o
           <div className="b">{k.def.blurb}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div className="gain">{k.meanLoss.toFixed(2)}s</div>
+          <div className="gain">{k.medianLoss.toFixed(2)}s</div>
           <div className="eyebrow" style={{ fontSize: 9.5 }}>
-            avg lost / lap
+            typical loss / lap
           </div>
         </div>
       </div>
@@ -99,6 +99,12 @@ export default function CornerDetail({ cc, lapNo, onSelectLap, onPrev, onNext, o
           Slowest-point speed on each lap. Spread: {k.minSpeedSpread.toFixed(0)} km/h.
         </p>
       </div>
+
+      {cc.oneOff && (
+        <div className="card note">
+          <span>{cc.oneOff}</span>
+        </div>
+      )}
 
       {verdict && mine && (
         <div className="verdict" style={{ ['--vc' as string]: DIAG_COLOR[verdict.diagnosis] }}>

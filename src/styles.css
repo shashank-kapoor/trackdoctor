@@ -836,7 +836,8 @@ details.howto li {
   font-size: 30px;
   font-weight: 700;
   color: var(--text-3);
-  width: 20px;
+  min-width: 20px;
+  white-space: nowrap;
   text-align: center;
 }
 .focus-item .body {
